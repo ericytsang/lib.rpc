@@ -7,7 +7,7 @@ import java.io.ObjectOutputStream
 import java.io.Serializable
 import java.rmi.RemoteException
 
-abstract class RpcFunction<in Context,out Return:Serializable>:Serializable
+abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
 {
     fun callFromClient(modem:Modem):Return
     {

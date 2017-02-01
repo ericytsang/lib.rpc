@@ -36,10 +36,17 @@ class RpcServerTest
     }
 
     @Test
-    fun generalTest()
+    fun returnNonNullTest()
     {
         val functionCall = TestAddRpcFunction(79)
         assert(functionCall.callFromClient(modem2) == 79+5)
+    }
+
+    @Test
+    fun returnNullTest()
+    {
+        val functionCall = TestNummRpcFunction(79)
+        assert(functionCall.callFromClient(modem2) == null)
     }
 
     @Test
@@ -63,6 +70,14 @@ class RpcServerTest
         override fun doInServer(context:Int):Int
         {
             return context+number
+        }
+    }
+
+    class TestNummRpcFunction(val number:Int):RpcFunction<Int,Int?>()
+    {
+        override fun doInServer(context:Int):Int?
+        {
+            return null
         }
     }
 
