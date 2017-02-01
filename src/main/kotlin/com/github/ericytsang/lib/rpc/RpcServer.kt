@@ -46,14 +46,14 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
     {
         override fun run()
         {
-            try
+            connection.use()
             {
-                @Suppress("UNCHECKED_CAST")
+                connection ->
                 val rpcFunctionCall = try
                 {
                     connection.inputStream
                         .let(::ObjectInputStream)
-                        .use {it.readObject() as RpcFunction<Context,Serializable>}
+                        .use {it.readObject()}
                 }
                 catch (ex:Exception)
                 {
@@ -61,6 +61,8 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
                 }
                 val result = try
                 {
+                    @Suppress("UNCHECKED_CAST")
+                    rpcFunctionCall as RpcFunction<Context,Serializable>
                     RpcResult.Success(rpcFunctionCall.doInServer(context))
                 }
                 catch (ex:Exception)
@@ -77,10 +79,6 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
                 {
                     if (isClosing) return else throw ex
                 }
-            }
-            finally
-            {
-                connection.close()
             }
         }
     }
