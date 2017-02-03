@@ -9,18 +9,27 @@ import java.rmi.RemoteException
 
 abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
 {
-    fun callFromClient(modem:Modem):Return
+    open fun callFromClient(modem:Modem):Return
     {
-        val connection = modem.connect(Unit)
         val byteO = ByteArrayOutputStream()
         val objO = ObjectOutputStream(byteO)
         objO.use {it.writeObject(this)}
-        connection.outputStream.use {it.write(byteO.toByteArray())}
-        @Suppress("UNCHECKED_CAST")
-        val result = connection.inputStream
-            .let(::ObjectInputStream)
-            .use {it.readObject()} as RpcResult
-        connection.close()
+        val result = try
+        {
+            modem.connect(Unit).use()
+            {
+                connection ->
+                connection.outputStream.use {it.write(byteO.toByteArray())}
+                @Suppress("UNCHECKED_CAST")
+                connection.inputStream
+                    .let(::ObjectInputStream)
+                    .use {it.readObject()} as RpcResult
+            }
+        }
+        catch (ex:Exception)
+        {
+            throw CommunicationException(ex)
+        }
         @Suppress("UNCHECKED_CAST")
         when (result)
         {
@@ -30,4 +39,6 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
     }
 
     abstract fun doInServer(context:Context):Return
+
+    class CommunicationException(cause:Throwable):RuntimeException(cause)
 }
