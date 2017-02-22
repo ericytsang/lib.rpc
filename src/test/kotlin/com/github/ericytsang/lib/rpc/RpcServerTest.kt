@@ -38,8 +38,8 @@ class RpcServerTest
     @Test
     fun returnNonNullTest()
     {
-        val functionCall = TestAddRpcFunction(79)
-        assert(functionCall.callFromClient(modem2) == 79+5)
+        assert(TestAddRpcFunction(79).callFromClient(modem2) == 79+5)
+        assert(TestAddRpcFunction(90).callFromClient(modem2) == 90+5)
     }
 
     @Test
