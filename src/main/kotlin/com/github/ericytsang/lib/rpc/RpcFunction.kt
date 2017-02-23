@@ -27,9 +27,11 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
                 }
                 set(value) = synchronized(postInvocationFunctionLatch)
                 {
-                    check(postInvocationFunctionLatch.count == 1L)
-                    field = value
-                    postInvocationFunctionLatch.countDown()
+                    if (postInvocationFunctionLatch.count == 1L)
+                    {
+                        field = value
+                        postInvocationFunctionLatch.countDown()
+                    }
                 }
 
             val thisAsSerialized = run()
@@ -69,15 +71,8 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
                         }
 
                         // initialize postInvocationFunction to release latch
-                        try
-                        {
-                            postInvocationFunction = {
-                                connection.outputStream.write(100)
-                            }
-                        }
-                        catch (ex:IllegalStateException)
-                        {
-                            // ignore
+                        postInvocationFunction = {
+                            connection.outputStream.write(100)
                         }
 
                         // return result to parent thread
