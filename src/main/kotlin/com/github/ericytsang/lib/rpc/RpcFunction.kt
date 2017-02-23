@@ -1,35 +1,116 @@
 package com.github.ericytsang.lib.rpc
 
 import com.github.ericytsang.lib.modem.Modem
+import com.github.ericytsang.lib.net.connection.Connection
 import java.io.ByteArrayOutputStream
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
 import java.rmi.RemoteException
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 
 abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
 {
     open fun callFromClient(modem:Modem):Return
     {
-        val byteO = ByteArrayOutputStream()
-        val objO = ObjectOutputStream(byteO)
-        objO.use {it.writeObject(this)}
-        val result = try
+        val resultQ = ArrayBlockingQueue<()->RpcResult>(1)
+        val worker = object:Thread()
         {
-            modem.connect(Unit).use()
+            val postInvocationFunctionLatch = CountDownLatch(1)
+            var postInvocationFunction:()->Unit = {}
+                get()
+                {
+                    postInvocationFunctionLatch.await()
+                    return field
+                }
+                set(value) = synchronized(postInvocationFunctionLatch)
+                {
+                    check(postInvocationFunctionLatch.count == 1L)
+                    field = value
+                    postInvocationFunctionLatch.countDown()
+                }
+
+            val thisAsSerialized = run()
             {
-                connection ->
-                connection.outputStream.use {it.write(byteO.toByteArray())}
-                @Suppress("UNCHECKED_CAST")
-                connection.inputStream
-                    .let(::ObjectInputStream)
-                    .use {it.readObject()} as RpcResult
+                val byteO = ByteArrayOutputStream()
+                ObjectOutputStream(byteO).use {it.writeObject(this@RpcFunction)}
+                byteO.toByteArray()
+            }
+
+            lateinit var connection:Connection
+
+            override fun run()
+            {
+                modem.connect(Unit).use()
+                {
+                    connection ->
+                    this.connection = connection
+
+                    // send parameters
+                    connection.outputStream.write(thisAsSerialized)
+
+                    // prepare to read result asynchronously
+                    val resultReader = thread()
+                    {
+                        // read result from remote
+                        @Suppress("UNCHECKED_CAST")
+                        val result = try
+                        {
+                            connection.inputStream
+                                .let(::ObjectInputStream)
+                                .let {it.readObject() as RpcResult}
+                                .let {{it}}
+                        }
+                        catch (ex:Exception)
+                        {
+                            {throw CommunicationException(ex)}
+                        }
+
+                        // initialize postInvocationFunction to release latch
+                        try
+                        {
+                            postInvocationFunction = {
+                                connection.outputStream.write(100)
+                            }
+                        }
+                        catch (ex:IllegalStateException)
+                        {
+                            // ignore
+                        }
+
+                        // return result to parent thread
+                        resultQ.put(result)
+                    }
+
+                    // execute the post-invocation function
+                    postInvocationFunction()
+                    resultReader.join()
+                }
+            }
+
+            override fun interrupt()
+            {
+                postInvocationFunction = {
+                    connection.outputStream.write(100)
+                }
+            }
+
+            init
+            {
+                start()
             }
         }
-        catch (ex:Exception)
+        try
         {
-            throw CommunicationException(ex)
+            worker.join()
         }
+        catch (ex:InterruptedException)
+        {
+            worker.interrupt()
+        }
+        val result = resultQ.take().invoke()
         @Suppress("UNCHECKED_CAST")
         when (result)
         {

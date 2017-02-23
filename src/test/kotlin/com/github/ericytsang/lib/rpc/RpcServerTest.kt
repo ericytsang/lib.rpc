@@ -9,12 +9,13 @@ import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.rmi.RemoteException
+import kotlin.concurrent.thread
 
 class RpcServerTest
 {
     companion object
     {
-        const val PORT = 53454
+        val PORT = (50000..60000).toList().let {it[Math.floor(Math.random()*it.size).toInt()]}
     }
 
     val connectionMaker = future {
@@ -33,11 +34,18 @@ class RpcServerTest
         rpcServer.close()
         con1.close()
         con2.close()
+        TestUtils.assertAllWorkerThreadsDead()
     }
 
     @Test
     fun returnNonNullTest()
     {
+        assert(TestAddRpcFunction(79).callFromClient(modem2) == 79+5)
+        assert(TestAddRpcFunction(90).callFromClient(modem2) == 90+5)
+        assert(TestAddRpcFunction(79).callFromClient(modem2) == 79+5)
+        assert(TestAddRpcFunction(90).callFromClient(modem2) == 90+5)
+        assert(TestAddRpcFunction(79).callFromClient(modem2) == 79+5)
+        assert(TestAddRpcFunction(90).callFromClient(modem2) == 90+5)
         assert(TestAddRpcFunction(79).callFromClient(modem2) == 79+5)
         assert(TestAddRpcFunction(90).callFromClient(modem2) == 90+5)
     }
@@ -65,6 +73,32 @@ class RpcServerTest
         }
     }
 
+    @Test
+    fun interruptedTest()
+    {
+        val functionCall = TestSleepRpcFunction(5000)
+        val currentThread = Thread.currentThread()
+        val interrupter = thread {
+            Thread.sleep(100)
+            currentThread.interrupt()
+        }
+        try
+        {
+            functionCall.callFromClient(modem2)
+        }
+        catch (ex:AssertionError)
+        {
+            throw ex
+        }
+        catch (ex:Exception)
+        {
+            println("==== expected exception start ====")
+            ex.printStackTrace(System.out)
+            println("==== expected exception end ====")
+        }
+        interrupter.join()
+    }
+
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()
     {
         override fun doInServer(context:Int):Int
@@ -86,6 +120,15 @@ class RpcServerTest
         override fun doInServer(context:Int):Int
         {
             throw IllegalArgumentException()
+        }
+    }
+
+    class TestSleepRpcFunction(val number:Long):RpcFunction<Int,Int>()
+    {
+        override fun doInServer(context:Int):Int
+        {
+            Thread.sleep(number)
+            return 2
         }
     }
 }

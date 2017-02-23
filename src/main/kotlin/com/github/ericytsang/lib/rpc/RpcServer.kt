@@ -6,6 +6,8 @@ import java.io.Closeable
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
+import java.util.concurrent.ArrayBlockingQueue
+import kotlin.concurrent.thread
 
 class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeable
 {
@@ -53,32 +55,47 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
                 {
                     connection.inputStream
                         .let(::ObjectInputStream)
-                        .use {it.readObject()}
+                        .readObject()
                 }
                 catch (ex:Exception)
                 {
                     if (isClosing) return else throw ex
                 }
-                val result = try
+                val resultQ = ArrayBlockingQueue<RpcResult>(1)
+                val resultComputer = thread()
                 {
-                    @Suppress("UNCHECKED_CAST")
-                    rpcFunctionCall as RpcFunction<Context,Serializable>
-                    RpcResult.Success(rpcFunctionCall.doInServer(context))
+                    val result = try
+                    {
+                        @Suppress("UNCHECKED_CAST")
+                        rpcFunctionCall as RpcFunction<Context,Serializable>
+                        RpcResult.Success(rpcFunctionCall.doInServer(context))
+                    }
+                    catch (ex:Exception)
+                    {
+                        RpcResult.Failure(ex)
+                    }
+                    resultQ.put(result)
                 }
-                catch (ex:Exception)
+                val interrupter = thread()
                 {
-                    RpcResult.Failure(ex)
+                    if (connection.inputStream.read() != -1 && resultComputer.isAlive)
+                    {
+                        resultComputer.interrupt()
+                    }
                 }
+                val result = resultQ.take()
                 try
                 {
                     connection.outputStream
                         .let(::ObjectOutputStream)
-                        .use {it.writeObject(result)}
+                        .writeObject(result)
                 }
                 catch (ex:Exception)
                 {
                     if (isClosing) return else throw ex
                 }
+                resultComputer.join()
+                interrupter.join()
             }
         }
     }
