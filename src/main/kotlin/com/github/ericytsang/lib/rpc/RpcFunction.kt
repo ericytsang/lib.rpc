@@ -18,37 +18,20 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
         val resultQ = ArrayBlockingQueue<()->RpcResult>(1)
         val worker = object:Thread()
         {
-            val postInvocationFunctionLatch = CountDownLatch(1)
-            var postInvocationFunction:()->Unit = {}
-                get()
-                {
-                    postInvocationFunctionLatch.await()
-                    return field
-                }
-                set(value) = synchronized(postInvocationFunctionLatch)
-                {
-                    if (postInvocationFunctionLatch.count == 1L)
-                    {
-                        field = value
-                        postInvocationFunctionLatch.countDown()
-                    }
-                }
-
-            val thisAsSerialized = run()
+            private val thisAsSerialized = run()
             {
                 val byteO = ByteArrayOutputStream()
                 ObjectOutputStream(byteO).use {it.writeObject(this@RpcFunction)}
                 byteO.toByteArray()
             }
 
-            lateinit var connection:Connection
+            private val doneLatch = CountDownLatch(1)
 
             override fun run()
             {
                 modem.connect(Unit).use()
                 {
                     connection ->
-                    this.connection = connection
 
                     // send parameters
                     connection.outputStream.write(thisAsSerialized)
@@ -70,26 +53,23 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
                             {throw CommunicationException(ex)}
                         }
 
-                        // initialize postInvocationFunction to release latch
-                        postInvocationFunction = {
-                            connection.outputStream.write(100)
-                        }
+                        // release latch since we have the result
+                        doneLatch.countDown()
 
                         // return result to parent thread
                         resultQ.put(result)
                     }
 
                     // execute the post-invocation function
-                    postInvocationFunction()
+                    doneLatch.await()
+                    connection.outputStream.write(100)
                     resultReader.join()
                 }
             }
 
             override fun interrupt()
             {
-                postInvocationFunction = {
-                    connection.outputStream.write(100)
-                }
+                doneLatch.countDown()
             }
 
             init
