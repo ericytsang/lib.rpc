@@ -9,6 +9,7 @@ import java.io.Serializable
 import java.rmi.RemoteException
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
 
 abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
@@ -85,7 +86,23 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
         {
             worker.interrupt()
         }
-        val result = resultQ.take().invoke()
+        val result = run()
+        {
+            var result:RpcResult
+            while (true)
+            {
+                try
+                {
+                    result = resultQ.take().invoke()
+                    break
+                }
+                catch (ex:InterruptedException)
+                {
+                    Thread.interrupted()
+                }
+            }
+            result
+        }
         @Suppress("UNCHECKED_CAST")
         when (result)
         {
