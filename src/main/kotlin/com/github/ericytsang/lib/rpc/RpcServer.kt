@@ -74,11 +74,22 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
                     {
                         RpcResult.Failure(ex)
                     }
-                    resultQ.put(result)
+                    while (true)
+                    {
+                        try
+                        {
+                            resultQ.put(result)
+                            break
+                        }
+                        catch (ex:InterruptedException)
+                        {
+                            Thread.interrupted()
+                        }
+                    }
                 }
                 val interrupter = thread()
                 {
-                    if (connection.inputStream.read() != -1 && resultComputer.isAlive)
+                    if (connection.inputStream.read() != -1)
                     {
                         resultComputer.interrupt()
                     }

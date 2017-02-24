@@ -99,6 +99,27 @@ class RpcServerTest
         interrupter.join()
     }
 
+    @Test
+    fun preemptiveInterruptedTest()
+    {
+        val functionCall = TestSleepRpcFunction(5000)
+        try
+        {
+            Thread.currentThread().interrupt()
+            functionCall.callFromClient(modem2)
+        }
+        catch (ex:AssertionError)
+        {
+            throw ex
+        }
+        catch (ex:Exception)
+        {
+            println("==== expected exception start ====")
+            ex.printStackTrace(System.out)
+            println("==== expected exception end ====")
+        }
+    }
+
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()
     {
         override fun doInServer(context:Int):Int
