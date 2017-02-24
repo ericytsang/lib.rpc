@@ -4,6 +4,7 @@ import java.io.Serializable
 
 sealed class RpcResult:Serializable
 {
-    class Failure(val throwable:Throwable):RpcResult()
-    class Success(val value:Serializable?):RpcResult()
+    abstract val isInterrupted:Boolean
+    class Failure(val throwable:Throwable,override val isInterrupted:Boolean):RpcResult()
+    class Success(val value:Serializable?,override val isInterrupted:Boolean):RpcResult()
 }

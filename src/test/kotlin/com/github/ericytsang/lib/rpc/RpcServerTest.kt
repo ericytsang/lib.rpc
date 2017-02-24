@@ -68,8 +68,9 @@ class RpcServerTest
         }
         catch (ex:RemoteException)
         {
-            ex.printStackTrace()
-            // ignore
+            println("==== expected exception start ====")
+            ex.printStackTrace(System.out)
+            println("==== expected exception end ====")
         }
     }
 
@@ -120,6 +121,14 @@ class RpcServerTest
         }
     }
 
+    @Test
+    fun remoteInterruptTest()
+    {
+        val functionCall = TestRemoteInterrupt(5000)
+        functionCall.callFromClient(modem2)
+        check(Thread.interrupted())
+    }
+
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()
     {
         override fun doInServer(context:Int):Int
@@ -141,6 +150,15 @@ class RpcServerTest
         override fun doInServer(context:Int):Int
         {
             throw IllegalArgumentException()
+        }
+    }
+
+    class TestRemoteInterrupt(val number:Int):RpcFunction<Int,Int>()
+    {
+        override fun doInServer(context:Int):Int
+        {
+            Thread.currentThread().interrupt()
+            return 4
         }
     }
 

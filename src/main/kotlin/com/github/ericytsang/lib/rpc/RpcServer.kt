@@ -68,11 +68,11 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
                     {
                         @Suppress("UNCHECKED_CAST")
                         rpcFunctionCall as RpcFunction<Context,Serializable>
-                        RpcResult.Success(rpcFunctionCall.doInServer(context))
+                        RpcResult.Success(rpcFunctionCall.doInServer(context),Thread.interrupted())
                     }
                     catch (ex:Exception)
                     {
-                        RpcResult.Failure(ex)
+                        RpcResult.Failure(ex,Thread.interrupted())
                     }
                     while (true)
                     {
