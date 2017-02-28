@@ -17,7 +17,7 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
     {
         isClosing = true
         modem.close()
-        server.join()
+        if (Thread.currentThread() != server) server.join()
     }
 
     private val server = object:Thread()
