@@ -9,7 +9,7 @@ import java.io.Serializable
 import java.util.concurrent.ArrayBlockingQueue
 import kotlin.concurrent.thread
 
-class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeable
+open class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeable
 {
     private var isClosing = false
 
@@ -24,17 +24,24 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
     {
         override fun run()
         {
-            while (true)
+            try
             {
-                val connection = try
+                while (true)
                 {
-                    modem.accept()
+                    val connection = try
+                    {
+                        modem.accept()
+                    }
+                    catch (ex:Exception)
+                    {
+                        if (isClosing) break else throw ex
+                    }
+                    ConnectionHandler(connection).start()
                 }
-                catch (ex:Exception)
-                {
-                    if (isClosing) break else throw ex
-                }
-                ConnectionHandler(connection).start()
+            }
+            finally
+            {
+                onShutdown()
             }
         }
 
@@ -42,6 +49,11 @@ class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeab
         {
             start()
         }
+    }
+
+    protected open fun onShutdown()
+    {
+
     }
 
     inner class ConnectionHandler(val connection:Connection):Thread()
