@@ -32,7 +32,7 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
         if (Thread.currentThread() != server) server.join()
     }
 
-    private val server = object:Thread()
+    private val server:Thread = object:Thread()
     {
         override fun run()
         {
@@ -51,6 +51,7 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                     }
                     else
                     {
+                        close()
                         onShutdown(false,ex)
                     }
                     return
