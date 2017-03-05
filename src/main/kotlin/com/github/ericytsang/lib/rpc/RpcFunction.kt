@@ -28,20 +28,34 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
 
             override fun run()
             {
-                modem.connect(Unit).use()
+                // serialize outside of try-catch block to differentiate
+                // serialization exceptions from communication exceptions
+                val thisAsSerialized = thisAsSerialized
+
+                // try to connect to the remote host...
+                val connection = try
                 {
-                    connection ->
+                    modem.connect(Unit)
+                }
+                catch (ex:Exception)
+                {
+                    resultQ.put({throw CommunicationException(ex)})
+                    return
+                }
 
-                    // send parameters
-                    connection.outputStream.write(thisAsSerialized)
-
+                connection.use()
+                {
+                    _ ->
                     // prepare to read result asynchronously
                     val resultReader = thread()
                     {
-                        // read result from remote
                         @Suppress("UNCHECKED_CAST")
                         val result = try
                         {
+                            // send parameters
+                            connection.outputStream.write(thisAsSerialized)
+
+                            // read result from remote
                             connection.inputStream
                                 .let(::ObjectInputStream)
                                 .let {it.readObject() as RpcResult}
@@ -76,17 +90,27 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
                 start()
             }
         }
+
+        // wait for the RPC operation to finish.
         try
         {
             worker.join()
         }
+
+        // if the client thread is interrupted, interrupt the RPC thread to
+        // interrupt the remote thread.
         catch (ex:InterruptedException)
         {
             worker.interrupt()
         }
+
+        // await and take the result from the result queue.
         val result = run()
         {
             var result:RpcResult
+
+            // loop is here to prevent client thread from being interrupted and
+            // not take the result.
             while (true)
             {
                 try
