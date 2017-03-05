@@ -26,7 +26,15 @@ class RpcServerTest
     val modem1 = Modem(con1)
     val modem2 = Modem(con2)
 
-    val rpcServer = RpcServer(modem1,5)
+    var shutdownCalled = false
+
+    val rpcServer = object:RpcServer<Int>(modem1,5)
+    {
+        override fun onShutdown(wasClosedLocally:Boolean,cause:Exception)
+        {
+            shutdownCalled = true
+        }
+    }
 
     @After
     fun teardown()
@@ -127,6 +135,14 @@ class RpcServerTest
         val functionCall = TestRemoteInterrupt(5000)
         functionCall.callFromClient(modem2)
         check(Thread.interrupted())
+    }
+
+    @Test
+    fun underlyingModemDiesCallsOnShutdown()
+    {
+        modem2.close()
+        Thread.sleep(100)
+        check(shutdownCalled)
     }
 
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()
