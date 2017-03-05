@@ -2,6 +2,7 @@ package com.github.ericytsang.lib.rpc
 
 import com.github.ericytsang.lib.modem.Modem
 import com.github.ericytsang.lib.net.connection.Connection
+import com.github.ericytsang.lib.onlysetonce.OnlySetOnce
 import java.io.Closeable
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
@@ -11,11 +12,11 @@ import kotlin.concurrent.thread
 
 open class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeable
 {
-    private var isClosing = false
+    private var closeStackTrace:Array<StackTraceElement>? by OnlySetOnce()
 
     override fun close() = synchronized(server)
     {
-        isClosing = true
+        closeStackTrace = Thread.currentThread().stackTrace
         modem.close()
         if (Thread.currentThread() != server) server.join()
     }
@@ -24,24 +25,26 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
     {
         override fun run()
         {
-            try
+            while (true)
             {
-                while (true)
+                val connection = try
                 {
-                    val connection = try
-                    {
-                        modem.accept()
-                    }
-                    catch (ex:Exception)
-                    {
-                        if (isClosing) break else throw ex
-                    }
-                    ConnectionHandler(connection).start()
+                    modem.accept()
                 }
-            }
-            finally
-            {
-                onShutdown()
+                catch (ex:Exception)
+                {
+                    val closeStackTrace = closeStackTrace
+                    if (closeStackTrace != null)
+                    {
+                        onShutdown(true,IllegalArgumentException("server closed at ${closeStackTrace.joinToString("\n","\n","\n")}",ex))
+                    }
+                    else
+                    {
+                        onShutdown(false,ex)
+                    }
+                    return
+                }
+                ConnectionHandler(connection).start()
             }
         }
 
@@ -51,9 +54,33 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
         }
     }
 
-    protected open fun onShutdown()
+    protected open fun onShutdown(wasClosedLocally:Boolean,cause:Exception)
     {
+        if (!wasClosedLocally)
+        {
+            throw cause
+        }
+    }
 
+    private fun callOnOngoingFunctionCallCommunicationException(cause:Exception)
+    {
+        val closeStackTrace = closeStackTrace
+        if (closeStackTrace != null)
+        {
+            onOngoingFunctionCallCommunicationException(true,IllegalArgumentException("server closed at ${closeStackTrace.joinToString("\n","\n","\n")}",cause))
+        }
+        else
+        {
+            onOngoingFunctionCallCommunicationException(false,cause)
+        }
+    }
+
+    protected open fun onOngoingFunctionCallCommunicationException(wasClosedLocally:Boolean,cause:Exception)
+    {
+        if (!wasClosedLocally)
+        {
+            throw cause
+        }
     }
 
     inner class ConnectionHandler(val connection:Connection):Thread()
@@ -71,7 +98,8 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 }
                 catch (ex:Exception)
                 {
-                    if (isClosing) return else throw ex
+                    callOnOngoingFunctionCallCommunicationException(ex)
+                    return
                 }
                 val resultQ = ArrayBlockingQueue<RpcResult>(1)
                 val resultComputer = thread()
@@ -115,7 +143,8 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 }
                 catch (ex:Exception)
                 {
-                    if (isClosing) return else throw ex
+                    callOnOngoingFunctionCallCommunicationException(ex)
+                    return
                 }
                 resultComputer.join()
                 interrupter.join()
