@@ -26,7 +26,7 @@ repositories {
 }
 
 dependencies {
-    compile "com.github.ericytsang:lib.modem:1.0.16"
+    compile "com.github.ericytsang:lib.modem:1.0.17"
     compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     testCompile "com.github.ericytsang:lib.concurrent:3.0.0"
     testCompile "junit:junit:4.11"
