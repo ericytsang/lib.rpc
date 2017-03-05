@@ -16,7 +16,14 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
 
     override fun close() = synchronized(server)
     {
-        closeStackTrace = Thread.currentThread().stackTrace
+        try
+        {
+            closeStackTrace = Thread.currentThread().stackTrace
+        }
+        catch (ex:Exception)
+        {
+            // ignore
+        }
         modem.close()
         if (Thread.currentThread() != server) server.join()
     }
