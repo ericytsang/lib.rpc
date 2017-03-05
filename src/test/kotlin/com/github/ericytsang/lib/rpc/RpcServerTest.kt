@@ -34,7 +34,7 @@ class RpcServerTest
         rpcServer.close()
         con1.close()
         con2.close()
-        TestUtils.assertAllWorkerThreadsDead()
+        TestUtils.assertAllWorkerThreadsDead(emptySet(),100)
     }
 
     @Test
