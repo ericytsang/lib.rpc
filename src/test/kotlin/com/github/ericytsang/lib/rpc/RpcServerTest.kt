@@ -8,7 +8,6 @@ import org.junit.Test
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.rmi.RemoteException
 import kotlin.concurrent.thread
 
 class RpcServerTest
