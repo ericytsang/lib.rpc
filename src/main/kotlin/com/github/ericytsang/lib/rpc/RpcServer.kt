@@ -150,8 +150,12 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 try
                 {
                     connection.outputStream
+                        .buffered()
                         .let(::ObjectOutputStream)
-                        .writeObject(result)
+                        .apply {
+                            writeObject(result)
+                            flush()
+                        }
                 }
                 catch (ex:Exception)
                 {
