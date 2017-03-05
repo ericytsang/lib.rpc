@@ -41,7 +41,7 @@ class RpcServerTest
         rpcServer.close()
         con1.close()
         con2.close()
-        TestUtils.assertAllWorkerThreadsDead(emptySet(),100)
+        TestUtils.assertAllWorkerThreadsDead(emptySet(),200)
     }
 
     @Test
@@ -73,7 +73,7 @@ class RpcServerTest
             functionCall.callFromClient(modem2)
             assert(false)
         }
-        catch (ex:RemoteException)
+        catch (ex:RpcFunction.RemoteException)
         {
             println("==== expected exception start ====")
             ex.printStackTrace(System.out)
@@ -142,6 +142,28 @@ class RpcServerTest
         modem2.close()
         Thread.sleep(100)
         check(shutdownCalled)
+    }
+
+    @Test
+    fun underlyingModemDiesDuringFunctionCall()
+    {
+        val functionCall = TestSleepRpcFunction(200)
+        val t = thread {
+            Thread.sleep(100)
+            modem1.close()
+        }
+        try
+        {
+            functionCall.callFromClient(modem2)
+            assert(false)
+        }
+        catch (ex:RpcFunction.CommunicationException)
+        {
+            println("==== expected exception start ====")
+            ex.printStackTrace(System.out)
+            println("==== expected exception end ====")
+        }
+        t.join()
     }
 
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()

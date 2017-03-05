@@ -74,7 +74,17 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
 
                     // execute the post-invocation function
                     doneLatch.await()
-                    connection.outputStream.write(100)
+                    try
+                    {
+                        connection.outputStream.write(100)
+                    }
+                    catch (ex:Exception)
+                    {
+                        // ignore if there is an exception because if there is,
+                        // the result reader should also have thrown an
+                        // exception...so it will be eventually communicated to
+                        // caller of this method.
+                    }
                     resultReader.join()
                 }
             }
@@ -145,4 +155,6 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
     abstract fun doInServer(context:Context):Return
 
     class CommunicationException(cause:Throwable):RuntimeException(cause)
+
+    class RemoteException(reason:String,cause:Throwable):RuntimeException(reason,cause)
 }
