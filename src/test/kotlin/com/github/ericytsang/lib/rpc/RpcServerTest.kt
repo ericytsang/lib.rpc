@@ -147,7 +147,7 @@ class RpcServerTest
     @Test
     fun underlyingModemDiesDuringFunctionCall()
     {
-        val functionCall = TestSleepRpcFunction(200)
+        val functionCall = TestSleepRpcFunction(10000)
         val t = thread {
             Thread.sleep(100)
             modem1.close()
@@ -205,6 +205,12 @@ class RpcServerTest
         {
             Thread.sleep(number)
             return 2
+        }
+
+        override fun stopDoInServer(doInServerThread:Thread)
+        {
+            doInServerThread.interrupt()
+            doInServerThread.join()
         }
     }
 }

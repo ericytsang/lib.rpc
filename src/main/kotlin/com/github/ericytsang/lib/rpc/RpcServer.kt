@@ -74,34 +74,15 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
         }
     }
 
-    private fun callOnOngoingFunctionCallCommunicationException(cause:Exception)
-    {
-        val closeStackTrace = closeStackTrace
-        if (closeStackTrace != null)
-        {
-            onOngoingFunctionCallCommunicationException(true,IllegalArgumentException("server closed at ${closeStackTrace.joinToString("\n","\n","\n")}",cause))
-        }
-        else
-        {
-            onOngoingFunctionCallCommunicationException(false,cause)
-        }
-    }
-
-    protected open fun onOngoingFunctionCallCommunicationException(wasClosedLocally:Boolean,cause:Exception)
-    {
-        if (!wasClosedLocally)
-        {
-            throw cause
-        }
-    }
-
-    inner class ConnectionHandler(val connection:Connection):Thread()
+    private inner class ConnectionHandler(val connection:Connection):Thread()
     {
         override fun run()
         {
             connection.use()
             {
                 connection ->
+
+                // receive the remote function call object.
                 val rpcFunctionCall = try
                 {
                     connection.inputStream
@@ -110,10 +91,14 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 }
                 catch (ex:Exception)
                 {
-                    callOnOngoingFunctionCallCommunicationException(ex)
                     return
                 }
+
+                // computation result is put in here by the result computer
+                // thread.
                 val resultQ = ArrayBlockingQueue<RpcResult>(1)
+
+                // compute the result of the function call.
                 val resultComputer = thread()
                 {
                     val result = try
@@ -139,13 +124,38 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                         }
                     }
                 }
+
+                // interrupt or terminate the result computer as per connection
+                // state.
                 val interrupter = thread()
                 {
+                    // wait for message from remote before interrupting the
+                    // thread that is computing the result.
                     if (connection.inputStream.read() != -1)
                     {
                         resultComputer.interrupt()
                     }
+
+                    // connection is terminated; stop the computing thread.
+                    else
+                    {
+                        try
+                        {
+                            rpcFunctionCall as RpcFunction<*,*>
+                            rpcFunctionCall.stopDoInServer(resultComputer)
+                            if (resultComputer.isAlive)
+                            {
+                                throw RuntimeException("thread still alive after call to stopDoInServer:${resultComputer.stackTrace.joinToString("\n","\nvvvv\n","\n^^^^")}}")
+                            }
+                        }
+                        catch (ex:ClassCastException)
+                        {
+                            // ignore...
+                        }
+                    }
                 }
+
+                // return the result to the remote caller
                 val result = resultQ.take()
                 try
                 {
@@ -159,7 +169,6 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 }
                 catch (ex:Exception)
                 {
-                    callOnOngoingFunctionCallCommunicationException(ex)
                     return
                 }
                 resultComputer.join()
