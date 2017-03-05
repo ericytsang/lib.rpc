@@ -8,13 +8,17 @@ import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
+import kotlin.concurrent.withLock
 
 open class RpcServer<in Context>(val modem:Modem,private val context:Context):Closeable
 {
     private var closeStackTrace:Array<StackTraceElement>? by OnlySetOnce()
 
-    override fun close() = synchronized(server)
+    private val closeLock = ReentrantLock()
+
+    override fun close() = closeLock.withLock()
     {
         try
         {
