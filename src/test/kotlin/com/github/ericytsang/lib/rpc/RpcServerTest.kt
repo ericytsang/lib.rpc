@@ -166,6 +166,18 @@ class RpcServerTest
         t.join()
     }
 
+    @Test
+    fun shutdownServerDuringLongRunningFunctionCall()
+    {
+        val functionCall = TestSleepRpcFunction(100000)
+        val t = thread {
+            functionCall.callFromClient(modem2)
+        }
+        Thread.sleep(100)
+        rpcServer.close()
+        t.join()
+    }
+
     class TestAddRpcFunction(val number:Int):RpcFunction<Int,Int>()
     {
         override fun doInServer(context:Int):Int
