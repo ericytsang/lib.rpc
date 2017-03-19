@@ -16,23 +16,18 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
 {
     private var closeStackTrace:Array<StackTraceElement>? by OnlySetOnce()
 
-    private val closeLock = ReentrantLock()
-
     override fun close()
     {
-        closeLock.withLock()
+        try
         {
-            try
-            {
-                closeStackTrace = Thread.currentThread().stackTrace
-            }
-            catch (ex:Exception)
-            {
-                // ignore
-            }
+            closeStackTrace = Thread.currentThread().stackTrace
             modem.close()
+            if (Thread.currentThread() != server) server.join()
         }
-        if (Thread.currentThread() != server) server.join()
+        catch (ex:Exception)
+        {
+            // ignore
+        }
     }
 
     private val server:Thread = object:Thread()
