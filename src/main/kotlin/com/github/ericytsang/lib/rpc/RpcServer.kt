@@ -18,17 +18,20 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
 
     private val closeLock = ReentrantLock()
 
-    override fun close() = closeLock.withLock()
+    override fun close()
     {
-        try
+        closeLock.withLock()
         {
-            closeStackTrace = Thread.currentThread().stackTrace
+            try
+            {
+                closeStackTrace = Thread.currentThread().stackTrace
+            }
+            catch (ex:Exception)
+            {
+                // ignore
+            }
+            modem.close()
         }
-        catch (ex:Exception)
-        {
-            // ignore
-        }
-        modem.close()
         if (Thread.currentThread() != server) server.join()
     }
 
