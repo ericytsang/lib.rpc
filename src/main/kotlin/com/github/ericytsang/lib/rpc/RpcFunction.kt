@@ -16,6 +16,7 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
     {
         val resultQ = ArrayBlockingQueue<()->RpcResult>(1)
         val worker = Worker(resultQ,modem,this).apply {start()}
+        var wasInterrupted = false
 
         // wait for the RPC operation to finish.
         try
@@ -27,6 +28,7 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
         // interrupt the remote thread.
         catch (ex:InterruptedException)
         {
+            wasInterrupted = true
             worker.interrupt()
         }
 
@@ -46,6 +48,7 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
                 }
                 catch (ex:InterruptedException)
                 {
+                    wasInterrupted = true
                     Thread.interrupted()
                 }
             }
@@ -62,7 +65,7 @@ abstract class RpcFunction<in Context,out Return:Serializable?>:Serializable
         }
         finally
         {
-            if (result.isInterrupted)
+            if (result.isInterrupted || wasInterrupted && !result.wasInterruptIssued)
             {
                 Thread.currentThread().interrupt()
             }

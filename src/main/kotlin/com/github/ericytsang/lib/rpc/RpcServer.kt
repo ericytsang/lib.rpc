@@ -92,6 +92,11 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                     return
                 }
 
+                // locked after the rps function returns to make sure nothing
+                // modifies the thread state
+                val mutex = ReentrantLock()
+                var wasInterruptIssued = false
+
                 // computation result is put in here by the result computer
                 // thread.
                 val resultQ = ArrayBlockingQueue<RpcResult>(1)
@@ -99,27 +104,30 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                 // compute the result of the function call.
                 val resultComputer = thread()
                 {
-                    val result = try
+                    val (wasThrown,functionCallResult) = try
                     {
                         @Suppress("UNCHECKED_CAST")
                         rpcFunctionCall as RpcFunction<Context,Serializable>
-                        RpcResult.Success(rpcFunctionCall.doInServer(context),Thread.interrupted())
+                        val functionCallResult = rpcFunctionCall.doInServer(context)
+                        false to functionCallResult
                     }
                     catch (ex:Exception)
                     {
-                        RpcResult.Failure(ex,Thread.interrupted())
+                        true to ex
                     }
-                    while (true)
+                    mutex.withLock()
                     {
-                        try
+                        val isInterrupted = Thread.interrupted()
+                        val result = if (!wasThrown)
                         {
-                            resultQ.put(result)
-                            break
+                            RpcResult.Success(functionCallResult,isInterrupted,wasInterruptIssued)
                         }
-                        catch (ex:InterruptedException)
+                        else
                         {
-                            Thread.interrupted()
+                            RpcResult.Failure(functionCallResult as Throwable,isInterrupted,wasInterruptIssued)
                         }
+                        Thread.interrupted()
+                        resultQ.put(result)
                     }
                 }
 
@@ -131,7 +139,12 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                     // thread that is computing the result.
                     if (connection.inputStream.read() != -1)
                     {
-                        resultComputer.interrupt()
+                        mutex.withLock()
+                        {
+                            wasInterruptIssued = true
+                            resultComputer.interrupt()
+                            Unit
+                        }
                     }
 
                     // connection is terminated; stop the computing thread.
