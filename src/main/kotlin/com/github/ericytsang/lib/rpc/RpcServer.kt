@@ -4,6 +4,7 @@ import com.github.ericytsang.lib.modem.Modem
 import com.github.ericytsang.lib.net.connection.Connection
 import com.github.ericytsang.lib.onlysetonce.OnlySetOnce
 import java.io.Closeable
+import java.io.NotSerializableException
 import java.io.ObjectInputStream
 import java.io.ObjectOutputStream
 import java.io.Serializable
@@ -177,6 +178,10 @@ open class RpcServer<in Context>(val modem:Modem,private val context:Context):Cl
                             writeObject(result)
                             flush()
                         }
+                }
+                catch (ex:NotSerializableException)
+                {
+                    throw ex
                 }
                 catch (ex:Exception)
                 {
